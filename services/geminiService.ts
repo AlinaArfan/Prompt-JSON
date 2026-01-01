@@ -1,17 +1,15 @@
 import { GoogleGenAI, Type, Schema } from "@google/genai";
-import { PromptMode, GeneratedSceneJson, GeneratedCharacterJson, PromptSettings } from "../types";
-
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+import { PromptMode, GeneratedSceneJson, GeneratedCharacterJson, PromptSettings } from "../types.ts";
 
 const VISUAL_SIGNATURE_SCHEMA: Schema = {
   type: Type.OBJECT,
-  description: "Detailed metadata extracted from the reference images to ensure maximum prompt fidelity.",
+  description: "Detailed metadata extracted from the reference images.",
   properties: {
-    detected_palette: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Specific colors detected (e.g., #2c3e50, Emerald Green)." },
-    lighting_type: { type: Type.STRING, description: "Detailed lighting analysis (e.g., 45-degree Rembrandt, High-key soft)." },
-    camera_specs: { type: Type.STRING, description: "Estimated lens and sensor settings from the image." },
-    key_textures: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Micro-textures detected (e.g., 'fine linen weave', 'weathered skin pores')." },
-    environmental_mood: { type: Type.STRING, description: "Atmospheric properties detected." }
+    detected_palette: { type: Type.ARRAY, items: { type: Type.STRING } },
+    lighting_type: { type: Type.STRING },
+    camera_specs: { type: Type.STRING },
+    key_textures: { type: Type.ARRAY, items: { type: Type.STRING } },
+    environmental_mood: { type: Type.STRING }
   },
   required: ["detected_palette", "lighting_type", "camera_specs", "key_textures", "environmental_mood"]
 };
@@ -45,11 +43,15 @@ export const generateJsonPrompt = async (
   imageParts?: { data: string; mimeType: string }[]
 ): Promise<GeneratedSceneJson | GeneratedCharacterJson> => {
   
+  // Safe initialization inside the function scope
+  const apiKey = (process.env as any).API_KEY;
+  if (!apiKey) throw new Error("API Key not found");
+  const ai = new GoogleGenAI({ apiKey });
+
   const modelId = "gemini-2.5-flash";
   const isScene = mode === PromptMode.SCENE;
   const hasImages = imageParts && imageParts.length > 0;
 
-  // Calculate strict part count
   const partCountMap: Record<string, number> = {
     '15s': 2,
     '30s': 4,
@@ -90,11 +92,10 @@ export const generateJsonPrompt = async (
           type: Type.OBJECT,
           properties: {
             timestamp: { type: Type.STRING },
-            description: { type: Type.STRING, description: "Must strictly maintain visual consistency with the reference image." },
+            description: { type: Type.STRING },
             objects_in_focus: { type: Type.ARRAY, items: { type: Type.STRING } },
           },
         },
-        description: `MUST contain EXACTLY ${exactPartCount} items for a ${settings.duration} video. Do not combine sequences.`,
         minItems: exactPartCount,
         maxItems: exactPartCount
       },
@@ -137,7 +138,6 @@ export const generateJsonPrompt = async (
             emotion: { type: Type.STRING },
           },
         },
-        description: `MUST contain EXACTLY ${exactPartCount} items for character performance.`,
         minItems: exactPartCount,
         maxItems: exactPartCount
       },
@@ -148,24 +148,10 @@ export const generateJsonPrompt = async (
   };
 
   const systemInstruction = `
-    You are a professional Visual Forensic Architect for "Veo 3". 
-    
-    STRICT CONSTRAINT:
-    The user has selected a duration of ${settings.duration}. 
-    You MUST generate EXACTLY ${exactPartCount} parts in the timeline/dialogue array. 
-    Failure to provide exactly ${exactPartCount} parts is a violation of protocol.
-
-    ${hasImages ? `
-    STRICT VISUAL ANCHORING RULES:
-    1. IMAGE IS PRIMARY: Every part of the timeline MUST be a continuation or a different angle of the SAME visual world seen in the image.
-    2. PIXEL-LEVEL ANALYSIS:
-       - Extract: ${settings.visualStyle} style markers from the image.
-       - Textures: Use exact material descriptions found in the pixels.
-    3. NO CONTEXT DRIFT: Even in Part ${exactPartCount}, the lighting and character features MUST match the initial reference image perfectly.
-    ` : ""}
-
-    Language: ${settings.language}
-    Complexity: ${settings.complexity}
+    Director of Photography (DoP) Expert for "Veo 3".
+    Duration: ${settings.duration}. Output EXACTLY ${exactPartCount} items in the sequence array.
+    ${hasImages ? "PRIORITIZE IMAGE PIXELS. Maintain exact character features and lighting from the uploaded image." : ""}
+    Language: ${settings.language}.
   `;
 
   try {
@@ -185,7 +171,7 @@ export const generateJsonPrompt = async (
         systemInstruction: systemInstruction,
         responseMimeType: "application/json",
         responseSchema: isScene ? SCENE_SCHEMA : CHARACTER_SCHEMA,
-        temperature: hasImages ? 0.15 : 0.7, // Even lower temperature to force adherence to part count and image data
+        temperature: hasImages ? 0.2 : 0.7,
       },
     });
 
