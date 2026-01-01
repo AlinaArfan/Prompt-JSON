@@ -3,13 +3,13 @@ import { PromptMode, GeneratedSceneJson, GeneratedCharacterJson, PromptSettings,
 
 const VISUAL_SIGNATURE_SCHEMA = {
   type: Type.OBJECT,
-  description: "Metadata visual mendalam yang diekstrak dari gambar referensi atau gaya yang dipilih.",
+  description: "Metadata visual mendalam yang diekstrak berdasarkan gaya visual terpilih.",
   properties: {
-    detected_palette: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Kode hex atau nama warna dominan sesuai gaya." },
-    lighting_type: { type: Type.STRING, description: "Jenis pencahayaan (misal: Rim lighting, Golden hour, Softbox)." },
-    camera_specs: { type: Type.STRING, description: "Lensa dan sudut kamera yang terdeteksi." },
-    key_textures: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Detail tekstur (misal: metalik, cel-shaded, plastic brick)." },
-    environmental_mood: { type: Type.STRING, description: "Atmosfer emosional dari gambar." }
+    detected_palette: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Palet warna yang WAJIB sesuai dengan estetika gaya (misal: neon untuk Cyberpunk)." },
+    lighting_type: { type: Type.STRING, description: "Teknik pencahayaan spesifik gaya (misal: Volumetric, Rim Lighting, Cel-shaded light)." },
+    camera_specs: { type: Type.STRING, description: "Lensa dan sudut kamera." },
+    key_textures: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Tekstur material (misal: clay fingerprints, plastic studs, ink lines)." },
+    environmental_mood: { type: Type.STRING, description: "Suasana atmosferik." }
   },
   required: ["detected_palette", "lighting_type", "camera_specs", "key_textures", "environmental_mood"]
 };
@@ -43,7 +43,7 @@ export const generateJsonPrompt = async (
   imageParts?: { data: string; mimeType: string }[]
 ): Promise<GeneratedContent> => {
   
-  if (!process.env.API_KEY) throw new Error("API Key tidak ditemukan di environment.");
+  if (!process.env.API_KEY) throw new Error("API Key tidak ditemukan.");
   
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const modelId = "gemini-3-pro-preview";
@@ -58,16 +58,15 @@ export const generateJsonPrompt = async (
   };
   const exactPartCount = partCountMap[settings.duration] || 3;
 
-  // Definisi karakteristik gaya visual untuk memperkuat model
+  // Technical Style Guide for strict adherence
   const styleGuides: Record<string, string> = {
-    'Cinematic': 'Gunakan anamorphic flare, high dynamic range, 35mm film grain, dan pencahayaan dramatis (chiaroscuro).',
-    'Anime': 'Gunakan cel-shading, vibrant colors, expressive lines, sakuga-style animation, dan painterly background textures.',
-    'Cyberpunk': 'Gunakan neon lighting (pink/cyan), rainy streets, high-tech grit, volumetric fog, dan retro-futuristic aesthetics.',
-    'Lego': 'Gunakan plastic textures, studded surfaces, minifigure articulation, brick-built environments, dan stop-motion jitter.',
-    'Claymation': 'Gunakan fingerprint textures on clay, stop-motion imperfections, tactile organic lighting, dan chunky character shapes.'
+    'Default': 'Realistic, high quality, 4k resolution.',
+    'Cinematic': 'Anamorphic lens, 35mm film stock, cinematic color grading, high dynamic range, chiaroscuro lighting.',
+    'Anime': 'Japanese animation style, cel-shading, vibrant hand-drawn lines, sakuga quality, painterly backgrounds, no realistic textures.',
+    'Cyberpunk': 'Neon-soaked aesthetic, pink and cyan color palette, rainy surfaces, volumetric fog, futuristic grit, high contrast.',
+    'Lego': 'Brick-built world, plastic textures, studded surfaces, minifigure articulation, tilt-shift lens effect, 12fps stop-motion feel.',
+    'Claymation': 'Tactile clay textures, visible fingerprints, stop-motion imperfections, organic lighting, chunky physical movement, Aardman aesthetic.'
   };
-
-  const currentStyleGuide = styleGuides[settings.visualStyle] || 'Gunakan gaya visual yang realistis dan mendetail.';
 
   const SCENE_SCHEMA = {
     type: Type.OBJECT,
@@ -91,7 +90,7 @@ export const generateJsonPrompt = async (
           lighting_style: { type: Type.STRING },
           color_grading: { type: Type.STRING },
           atmosphere: { type: Type.STRING },
-          style_implementation: { type: Type.STRING, description: `Bagaimana gaya ${settings.visualStyle} diterapkan secara teknis.` }
+          style_implementation: { type: Type.STRING, description: `Deskripsi bagaimana elemen visual diubah menjadi gaya ${settings.visualStyle}.` }
         },
       },
       audio: AUDIO_SCHEMA,
@@ -102,14 +101,14 @@ export const generateJsonPrompt = async (
           type: Type.OBJECT,
           properties: {
             timestamp: { type: Type.STRING },
-            description: { type: Type.STRING, description: `Deskripsi aksi yang WAJIB konsisten dengan gaya ${settings.visualStyle}.` },
+            description: { type: Type.STRING, description: `Aksi yang digambarkan dengan terminologi gaya ${settings.visualStyle}.` },
             objects_in_focus: { type: Type.ARRAY, items: { type: Type.STRING } },
           },
         },
         minItems: exactPartCount,
         maxItems: exactPartCount
       },
-      veo_optimized_prompt: { type: Type.STRING, description: `Prompt final. Harus diawali dengan gaya visual: "[STYLE: ${settings.visualStyle.toUpperCase()}] ..."` },
+      veo_optimized_prompt: { type: Type.STRING, description: `WAJIB diawali dengan: "[STYLE: ${settings.visualStyle.toUpperCase()}]"` },
     },
     required: ["title", "visual_signature", "technical", "visuals", "audio", "prompt_components", "timeline", "veo_optimized_prompt"],
   };
@@ -152,34 +151,34 @@ export const generateJsonPrompt = async (
         maxItems: exactPartCount
       },
       action_description: { type: Type.STRING },
-      veo_optimized_prompt: { type: Type.STRING, description: `Prompt final. Harus diawali dengan gaya visual: "[STYLE: ${settings.visualStyle.toUpperCase()}] ..."` },
+      veo_optimized_prompt: { type: Type.STRING, description: `WAJIB diawali dengan: "[STYLE: ${settings.visualStyle.toUpperCase()}]"` },
     },
     required: ["character_profile", "visual_signature", "performance", "audio", "prompt_components", "action_description", "veo_optimized_prompt"],
   };
 
   const systemInstruction = `
-    Anda adalah "Veo 3 Master Architect" kelas dunia. 
-    Tugas Anda: Membuat JSON Prompt yang sangat akurat dengan gaya visual yang diminta.
+    Anda adalah "Veo 3 Style Master Architect". 
+    SANGAT PENTING: Anda harus memaksa output untuk mengikuti GAYA VISUAL: ${settings.visualStyle.toUpperCase()}.
 
-    GAYA VISUAL WAJIB: ${settings.visualStyle.toUpperCase()}
-    PANDUAN GAYA: ${currentStyleGuide}
+    PROTOKOL GAYA:
+    1. Jika gaya adalah ANIME, dilarang menggunakan kata "photo", "realistic", "4k photo". Gunakan "cel-shaded", "2D animation", "illustrated".
+    2. Jika gaya adalah LEGO, gunakan "plastic bricks", "minifigure style", "studs".
+    3. Jika gaya adalah CLAYMATION, gunakan "clay texture", "stop-motion", "fingerprints".
+    
+    PANDUAN TEKNIS GAYA: ${styleGuides[settings.visualStyle]}
 
-    INSTRUKSI KHUSUS:
-    1. TIMELINE & DESKRIPSI: Setiap kalimat dalam timeline harus mencerminkan estetika ${settings.visualStyle}. 
-       - Jika Anime, sebutkan "vibrant cel-shading" atau "painterly light".
-       - Jika Lego, sebutkan "plastic reflection" atau "studded floor".
-    2. VEO OPTIMIZED PROMPT: Awali prompt ini dengan "[STYLE: ${settings.visualStyle.toUpperCase()}]". Ini sangat krusial agar model Veo 3 memahami konteks utama.
-    3. DURASI: Hasilkan tepat ${exactPartCount} part untuk durasi ${settings.duration}.
-    
-    ANALISIS VISUAL (GAMBAR):
-    ${hasImages ? `Gunakan gambar yang diupload sebagai referensi utama untuk objek, wajah, dan pencahayaan, tapi terjemahkan ke dalam gaya ${settings.visualStyle}.` : ""}
-    
-    Bahasa Output: ${settings.language}
-    Kompleksitas: ${settings.complexity}
+    ANALISIS GAMBAR:
+    ${hasImages ? `Ambil subjek dan komposisi dari gambar, tetapi UBAH TOTAL estetikanya menjadi gaya ${settings.visualStyle}. Jangan biarkan gambar membuat Anda menjadi realistis jika gaya yang dipilih bukan Cinematic/Default.` : ""}
+
+    PROMPT OPTIMASI VEO:
+    Format prompt akhir harus: "[STYLE: ${settings.visualStyle.toUpperCase()}][MEDIUM: ${settings.visualStyle}] (Deskripsi teknis dan aksi...)"
+
+    DURASI: Tepat ${exactPartCount} bagian untuk ${settings.duration}.
+    BAHASA: ${settings.language}.
   `;
 
   try {
-    const contents: any = { parts: [{ text: inputText || `Generate a ${settings.visualStyle} masterpiece based on visuals.` }] };
+    const contents: any = { parts: [{ text: inputText || `Create a ${settings.visualStyle} scene.` }] };
     if (hasImages) {
       imageParts.forEach(img => {
         contents.parts.push({
@@ -195,12 +194,12 @@ export const generateJsonPrompt = async (
         systemInstruction: systemInstruction,
         responseMimeType: "application/json",
         responseSchema: isScene ? SCENE_SCHEMA : CHARACTER_SCHEMA,
-        temperature: hasImages ? 0.2 : 0.65, // Temperatur rendah untuk kepatuhan gaya yang lebih ketat
+        temperature: 0.15, // Low temperature for high precision style adherence
       },
     });
 
     const text = response.text;
-    if (!text) throw new Error("Model gagal memberikan respon.");
+    if (!text) throw new Error("Empty response from architect.");
     return JSON.parse(text);
   } catch (error) {
     console.error("Architect Error:", error);
